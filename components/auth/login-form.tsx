@@ -3,13 +3,30 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
-import { Github, Chrome, Loader2 } from "lucide-react"
-import { authApi, ApiError, type ValidationError } from "@/lib/api"
+
+import { Github, Loader2 } from "lucide-react"
+import { GoogleIcon } from "@/components/icons/google-icon"
+import { authApi, ApiError } from "@/lib/api"
+
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .email("Please enter a valid email address"),
+  password: z
+    .string()
+    .min(1, "Password is required")
+    .min(8, "Password must be at least 8 characters"),
+})
+
+type LoginFormData = z.infer<typeof loginSchema>
 
 interface LoginFormProps {
   redirectTo?: string
@@ -18,35 +35,24 @@ interface LoginFormProps {
 export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [isOAuthLoading, setIsOAuthLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({})
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+    setError: setFormError,
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
   })
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target
-    setFormData(prev => ({ ...prev, [name]: value }))
-    
-    // Clear validation error for this field when user starts typing
-    if (validationErrors[name]) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[name]
-        return newErrors
-      })
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
     setError(null)
-    setValidationErrors({})
 
     try {
-      const response = await authApi.login(formData)
+      const response = await authApi.login(data)
       
       // Store access token (in a real app, you might want to use a more secure storage)
       localStorage.setItem('access_token', response.access_token)
@@ -56,9 +62,14 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 400 && err.response && 'messages' in err.response) {
-          // Handle validation errors
-          const validationError = err.response as ValidationError
-          setValidationErrors(validationError.messages)
+          // Handle validation errors from backend
+          const validationError = err.response as { error: string; messages: Record<string, string[]> }
+          Object.entries(validationError.messages).forEach(([field, messages]) => {
+            setFormError(field as keyof LoginFormData, {
+              type: 'server',
+              message: (messages as string[])[0],
+            })
+          })
           setError(validationError.error)
         } else if (err.status === 401) {
           setError("Invalid email or password")
@@ -75,7 +86,7 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     try {
-      setIsLoading(true)
+      setIsOAuthLoading(provider)
       
       // Store redirect destination for after OAuth callback
       localStorage.setItem('oauth_redirect_to', redirectTo)
@@ -90,9 +101,12 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
       } else {
         setError("Network error. Please try again.")
       }
-      setIsLoading(false)
+      setIsOAuthLoading(null)
     }
   }
+
+  const isFormLoading = isLoading || isSubmitting
+  const isAnyLoading = isFormLoading || !!isOAuthLoading
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
@@ -123,12 +137,12 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
               variant="outline"
               className="w-full h-11 bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors"
               onClick={() => handleOAuthLogin('google')}
-              disabled={isLoading}
+              disabled={isAnyLoading}
             >
-              {isLoading ? (
+              {isOAuthLoading === 'google' ? (
                 <Loader2 className="mr-3 h-4 w-4 animate-spin" />
               ) : (
-                <Chrome className="mr-3 h-4 w-4" />
+                <GoogleIcon className="mr-3 h-4 w-4" />
               )}
               Continue with Google
             </Button>
@@ -136,9 +150,9 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
               variant="outline"
               className="w-full h-11 bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors"
               onClick={() => handleOAuthLogin('github')}
-              disabled={isLoading}
+              disabled={isAnyLoading}
             >
-              {isLoading ? (
+              {isOAuthLoading === 'github' ? (
                 <Loader2 className="mr-3 h-4 w-4 animate-spin" />
               ) : (
                 <Github className="mr-3 h-4 w-4" />
@@ -147,35 +161,31 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
             </Button>
           </div>
 
-          {/* Divider */}
-          <div className="relative">
-            <Separator className="bg-slate-200" />
-            <div className="absolute inset-0 flex justify-center">
-              <span className="bg-white px-4 text-sm text-slate-500 font-medium">or</span>
-            </div>
+          {/* Divider*/}
+          <div className="relative flex items-center">
+            <div className="flex-grow border-t border-slate-200"></div>
+            <span className="flex-shrink mx-4 text-sm text-slate-500 font-medium bg-white">or</span>
+            <div className="flex-grow border-t border-slate-200"></div>
           </div>
 
           {/* Credential Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium text-slate-700">
                 Email
               </Label>
               <Input
                 id="email"
-                name="email"
                 type="email"
                 placeholder="Enter your email"
                 className={`h-11 bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 ${
-                  validationErrors.email ? 'border-red-500 focus:border-red-500' : ''
+                  errors.email ? 'border-red-500 focus:border-red-500' : ''
                 }`}
-                value={formData.email}
-                onChange={handleInputChange}
-                required
-                disabled={isLoading}
+                disabled={isAnyLoading}
+                {...register("email")}
               />
-              {validationErrors.email && (
-                <p className="text-sm text-red-600">{validationErrors.email[0]}</p>
+              {errors.email && (
+                <p className="text-sm text-red-600">{errors.email.message}</p>
               )}
             </div>
 
@@ -185,28 +195,25 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
               </Label>
               <Input
                 id="password"
-                name="password"
                 type="password"
                 placeholder="Enter your password"
                 className={`h-11 bg-white border-slate-200 focus:border-indigo-500 focus:ring-indigo-500 ${
-                  validationErrors.password ? 'border-red-500 focus:border-red-500' : ''
+                  errors.password ? 'border-red-500 focus:border-red-500' : ''
                 }`}
-                value={formData.password}
-                onChange={handleInputChange}
-                required
-                disabled={isLoading}
+                disabled={isAnyLoading}
+                {...register("password")}
               />
-              {validationErrors.password && (
-                <p className="text-sm text-red-600">{validationErrors.password[0]}</p>
+              {errors.password && (
+                <p className="text-sm text-red-600">{errors.password.message}</p>
               )}
             </div>
 
             <Button
               type="submit"
               className="w-full h-11 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-200"
-              disabled={isLoading}
+              disabled={isAnyLoading}
             >
-              {isLoading ? (
+              {isFormLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Signing in...

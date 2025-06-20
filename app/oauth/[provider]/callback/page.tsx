@@ -13,7 +13,6 @@ export default function CallbackPage({ params }: CallbackPageProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -50,7 +49,6 @@ export default function CallbackPage({ params }: CallbackPageProps) {
       } catch (err) {
         console.error('OAuth callback error:', err)
         setError(err instanceof Error ? err.message : 'Authentication failed')
-        setIsLoading(false)
       }
     }
 
