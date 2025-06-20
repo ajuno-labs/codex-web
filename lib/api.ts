@@ -5,6 +5,12 @@ export interface LoginRequest {
   password: string
 }
 
+export interface RegisterRequest {
+  email: string
+  password: string
+  password_confirmation: string
+}
+
 export interface AuthResponse {
   access_token: string
 }
@@ -69,6 +75,14 @@ export const authApi = {
     return apiRequest<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
+    })
+  },
+
+  // Register new user
+  async register(userData: RegisterRequest): Promise<AuthResponse> {
+    return apiRequest<AuthResponse>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(userData),
     })
   },
 

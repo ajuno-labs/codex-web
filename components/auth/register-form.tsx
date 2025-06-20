@@ -18,7 +18,7 @@ import { FormDivider } from "./form-divider"
 import { FormInput } from "./form-input"
 import { useOAuth } from "./use-oauth"
 
-const loginSchema = z.object({
+const registerSchema = z.object({
   email: z
     .string()
     .min(1, "Email is required")
@@ -27,15 +27,21 @@ const loginSchema = z.object({
     .string()
     .min(1, "Password is required")
     .min(8, "Password must be at least 8 characters"),
+  password_confirmation: z
+    .string()
+    .min(1, "Password confirmation is required"),
+}).refine((data) => data.password === data.password_confirmation, {
+  message: "Passwords do not match",
+  path: ["password_confirmation"],
 })
 
-type LoginFormData = z.infer<typeof loginSchema>
+type RegisterFormData = z.infer<typeof registerSchema>
 
-interface LoginFormProps {
+interface RegisterFormProps {
   redirectTo?: string
 }
 
-export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
+export default function RegisterForm({ redirectTo = "/" }: RegisterFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,16 +53,16 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
     handleSubmit,
     formState: { errors, isSubmitting },
     setError: setFormError,
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
   })
 
-  const onSubmit = async (data: LoginFormData) => {
+  const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const response = await authApi.login(data)
+      const response = await authApi.register(data)
       
       // Store access token (in a real app, you might want to use a more secure storage)
       localStorage.setItem('access_token', response.access_token)
@@ -69,16 +75,16 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
           // Handle validation errors from backend
           const validationError = err.response as { error: string; messages: Record<string, string[]> }
           Object.entries(validationError.messages).forEach(([field, messages]) => {
-            setFormError(field as keyof LoginFormData, {
+            setFormError(field as keyof RegisterFormData, {
               type: 'server',
               message: (messages as string[])[0],
             })
           })
           setError(validationError.error)
-        } else if (err.status === 401) {
-          setError("Invalid email or password")
+        } else if (err.status === 422) {
+          setError("Email already exists or validation failed")
         } else {
-          setError(err.response?.error || "An error occurred during login")
+          setError(err.response?.error || "An error occurred during registration")
         }
       } else {
         setError("Network error. Please try again.")
@@ -101,8 +107,8 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
 
   return (
     <AuthCard
-      title="Welcome to Codex"
-      description="Turn the web into a map you can walk."
+      title="Join Codex"
+      description="Create your account and start exploring."
     >
       <ErrorDisplay error={error} />
 
@@ -114,7 +120,7 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
 
       <FormDivider />
 
-      {/* Credential Form */}
+      {/* Registration Form */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <FormInput
           id="email"
@@ -130,10 +136,20 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
           id="password"
           label="Password"
           type="password"
-          placeholder="Enter your password"
+          placeholder="Create a password"
           error={errors.password?.message}
           disabled={isAnyLoading}
           {...register("password")}
+        />
+
+        <FormInput
+          id="password_confirmation"
+          label="Confirm Password"
+          type="password"
+          placeholder="Confirm your password"
+          error={errors.password_confirmation?.message}
+          disabled={isAnyLoading}
+          {...register("password_confirmation")}
         />
 
         <Button
@@ -144,23 +160,23 @@ export default function LoginForm({ redirectTo = "/" }: LoginFormProps) {
           {isFormLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing in...
+              Creating account...
             </>
           ) : (
-            "Sign in to Codex"
+            "Create account"
           )}
         </Button>
       </form>
 
-      {/* Sign up link */}
+      {/* Sign in link */}
       <div className="text-center pt-4">
         <p className="text-sm text-slate-600">
-          Don&apos;t have an account?{" "}
+          Already have an account?{" "}
           <Link
-            href="/register"
+            href="/login"
             className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors underline-offset-4 hover:underline"
           >
-            Create one
+            Sign in
           </Link>
         </p>
       </div>
