@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
-import { Github, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { GoogleIcon } from "@/components/icons/google-icon"
+import { GitHubIcon } from "@/components/icons/github-icon"
 
 interface OAuthButtonsProps {
   onOAuthLogin: (provider: 'google' | 'github') => Promise<void>
@@ -33,7 +34,7 @@ export function OAuthButtons({ onOAuthLogin, isOAuthLoading, disabled }: OAuthBu
         {isOAuthLoading === 'github' ? (
           <Loader2 className="mr-3 h-4 w-4 animate-spin" />
         ) : (
-          <Github className="mr-3 h-4 w-4" />
+          <GitHubIcon className="mr-3 h-4 w-4" />
         )}
         Continue with GitHub
       </Button>
